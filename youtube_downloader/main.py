@@ -1,47 +1,69 @@
 from pytube import YouTube, Playlist
-from os import system
+import sys
+import os
+from PySide6.QtWidgets import QApplication,QFileDialog, QPushButton, QLabel
+from interface import Ui_MainWindow
 
+class Window(Ui_MainWindow):
 
-def show_res_list(video):
-    res_list = [stream.resolution for stream in video.streams.filter(progressive=True, file_extension='mp4')]
-    print("----\nChoose the resolution from list:")
-    for res in res_list:
-        print(res)
-    d_res = input('----\n')
-    if d_res.find('p') == -1:
-        d_res += 'p'
-    return d_res
+    def __init__(self) -> None:
+        super().__init__()
+        self.ui = Ui_MainWindow()
+        self.ui.setupUi(self)
+        self.setWindowTitle("YouTube Downloader")
+        self.ui.format_mp4.toggle()
+        self.ui.directory_select.clicked.connect(self.directory_select)
+        self.ui.download.clicked.connect(self.download)
+        self.ui.get_res.clicked.connect(self.show_res_list)
 
+    def directory_select(self):
+        self.f_name = QFileDialog.getExistingDirectory(self)
+        if len(self.f_name)>40:
+            f_show = self.f_name[-40:]
+            f_show = '...' + f_show[f_show.index('/'):]
+        else:
+            f_show = self.f_name
+        self.ui.label.setText(f_show)
+        print(self.f_name)
+        
+    def show_res_list(self):
+        link = self.ui.url.text()
+        if link.find('/playlist?') !=-1:
+            self.yt = Playlist(link)
+            res_list = [stream.resolution for stream in self.yt.videos[0].streams.filter(progressive=True, file_extension='mp4')]
+        else:
+            self.yt = YouTube(link)
+            res_list = [stream.resolution for stream in self.yt.streams.filter(progressive=True, file_extension='mp4')]
+        self.ui.res_list.addItems(res_list)
 
-def download_moment(video, res):
-    print(f'Downloading {video.title}')
-    v = video.streams.get_by_resolution(res)
-    try:
-        v.download(output_path=directory)
-    except:
-        print(f"DownloadError {v.title}")
+    def get_audio(self, video):
+        v = video.streams.filter(only_audio=True).first()
+        out = v.download(output_path=self.f_name)
+        base, ext = os.path.splitext(out)
+        new_file = base + '.mp3'
+        os.rename(out, new_file)
 
-def download():
-    system('cls')
-    link = input("Enter a video/playlist link:\n")
-    if link.find('/playlist?') !=-1:
-        yt = Playlist(link)
-        res = show_res_list(yt.videos[0])
-        for video in yt.videos:
-            download_moment(video, res)
-    else:
-        yt = YouTube(link)
-        res = show_res_list(yt)
-        download_moment(video, res)
+    def download(self):
+        if type(self.yt) is Playlist:
+            for video in self.yt.videos:
+                if self.ui.format_mp3.isChecked():
+                    self.get_audio(video)
+                else:    
+                    v = video.streams.get_by_resolution(self.ui.res_list.currentText())
+                    print(type(v))
+                    v.download(output_path=self.f_name)
+                self.setWindowTitle(f"Download in progress")
+        else:
+            if self.ui.format_mp3.isChecked():
+                self.get_audio(self.yt)
+            else:
+                v = self.yt.streams.get_by_resolution(self.ui.res_list.currentText())
+                v.download(output_path=self.f_name)
+        self.setWindowTitle(f"YouTube Downloader")
 
-    another = input("Download another video?(Y/N): ")
-    if another.lower() == 'y':
-        download()
-    else:
-        print("Download complete")
 
 if __name__ == "__main__":
-    system('cls')
-    print('Choose directory for download:')
-    directory = input(r'')
-    download()
+    app = QApplication(sys.argv)
+    window = Window()
+    window.show()
+    sys.exit(app.exec())
